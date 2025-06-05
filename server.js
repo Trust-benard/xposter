@@ -5,7 +5,7 @@ const { postTweet } = require('./poster');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000; // Render will set PORT env variable
 
 // Middleware
 app.use(express.json());
@@ -94,7 +94,22 @@ function getNextPostTime() {
 }
 
 // Start the server and scheduler
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Server started at: ${new Date().toISOString()}`);
   schedulePosts(); // Start the scheduler
+});
+
+// Log when server is ready
+server.on('listening', () => {
+  console.log(`Server is listening on port ${PORT}`);
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
