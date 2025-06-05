@@ -1,79 +1,65 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const { getSheetData, markAsPosted, addNewPost } = require('./sheet');
-const { postTweet } = require('./poster');
 const { schedulePosts } = require('./cronjob');
-const dayjs = require('dayjs');
+const { getSheetData, markAsPosted } = require('./sheet');
+const { postTweet } = require('./poster');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
-app.use(express.static('public'));
-app.set('view engine', 'ejs');
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.get('/', async (req, res) => {
-  try {
-    const posts = await getSheetData();
-    res.render('dashboard', { 
-      posts,
-      today: dayjs().format('YYYY-MM-DD')
-    });
-  } catch (error) {
-    res.status(500).send(`Error: ${error.message}`);
-  }
+app.get('/', (req, res) => {
+  res.send('X Auto-Poster is running');
 });
 
-// Get all posts
-app.get('/api/posts', async (req, res) => {
+// Get status
+app.get('/api/status', async (req, res) => {
   try {
     const posts = await getSheetData();
-    res.json(posts);
+    const postedCount = posts.filter(post => post[1] === 'yes').length;
+    const pendingCount = posts.length - postedCount;
+    
+    res.json({
+      status: 'running',
+      totalPosts: posts.length,
+      postedCount,
+      pendingCount,
+      nextPostTime: getNextPostTime()
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Add new post
-app.post('/api/posts', async (req, res) => {
-  try {
-    const { mainTweet, threadReplies, type, tags, scheduledDate } = req.body;
-    await addNewPost(mainTweet, threadReplies, type, tags, scheduledDate);
-    res.redirect('/');
-  } catch (error) {
-    res.status(500).send(`Error: ${error.message}`);
-  }
-});
-
 // Post now (manual override)
-app.post('/api/post-now/:index', async (req, res) => {
+app.post('/api/post-now', async (req, res) => {
   try {
-    const index = parseInt(req.params.index);
     const posts = await getSheetData();
     
-    if (index < 0 || index >= posts.length) {
-      return res.status(400).json({ error: 'Invalid post index' });
+    // Find first unposted tweet
+    const index = posts.findIndex(post => !post[1] || post[1].toLowerCase() !== 'yes');
+    
+    if (index === -1) {
+      return res.status(404).json({ error: 'No unposted tweets available' });
     }
     
-    const post = posts[index];
-    const [content, threadContent, type, tags] = post;
+    const [content] = posts[index];
     
-    // Parse thread content if available
-    const thread = threadContent ? threadContent.split('|').map(t => t.trim()).filter(t => t !== '') : [];
-    
-    // Add tags if available
-    const contentWithTags = tags ? `${content}\n\n${tags}` : content;
-    
-    // Post the tweet and thread
-    const result = await postTweet(contentWithTags, thread);
+    // Post the tweet
+    const result = await postTweet(content);
     
     if (result) {
       await markAsPosted(index);
-      res.json({ success: true, message: 'Post published successfully' });
+      res.json({ 
+        success: true, 
+        message: 'Tweet posted successfully',
+        tweetId: result.data.id,
+        content: content.substring(0, 30) + (content.length > 30 ? '...' : '')
+      });
     } else {
       res.status(500).json({ error: 'Failed to post tweet' });
     }
@@ -81,6 +67,31 @@ app.post('/api/post-now/:index', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Helper function to get next post time
+function getNextPostTime() {
+  const now = new Date();
+  const hour = now.getHours();
+  
+  // Posting hours are 8-17 (8 AM to 5 PM)
+  if (hour >= 17) {
+    // After 5 PM, next post is at 8 AM tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(8, 0, 0, 0);
+    return tomorrow;
+  } else if (hour < 8) {
+    // Before 8 AM, next post is at 8 AM today
+    const today = new Date();
+    today.setHours(8, 0, 0, 0);
+    return today;
+  } else {
+    // During posting hours, next post is at the next hour
+    const nextHour = new Date();
+    nextHour.setHours(hour + 1, 0, 0, 0);
+    return nextHour;
+  }
+}
 
 // Start the server and scheduler
 app.listen(PORT, () => {

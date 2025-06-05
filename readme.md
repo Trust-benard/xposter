@@ -8,6 +8,7 @@ A simple Node.js application that automatically posts tweets from a Google Sheet
 - Automatically cycles through available tweets
 - Tracks posted tweets to avoid duplicates
 - Uses Google Sheets as a simple content management system
+- Express API for monitoring and manual control
 - Easy to set up and maintain
 
 ## Setup
@@ -39,6 +40,7 @@ API_SECRET=your_twitter_api_secret
 ACCESS_TOKEN=your_twitter_access_token
 ACCESS_TOKEN_SECRET=your_twitter_access_token_secret
 SPREADSHEET_ID=your_google_spreadsheet_id
+PORT=3000
 ```
 
 4. Place your Google Service Account credentials in `credentials.json`
@@ -71,10 +73,16 @@ For continuous operation, use PM2:
 
 ```
 npm install -g pm2
-pm2 start index.js
+pm2 start server.js
 pm2 startup
 pm2 save
 ```
+
+## API Endpoints
+
+- `GET /` - Check if the service is running
+- `GET /api/status` - Get posting statistics and next scheduled post time
+- `POST /api/post-now` - Manually trigger a post (posts the next available tweet)
 
 ## Posting Schedule
 
