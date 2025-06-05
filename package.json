@@ -1,0 +1,21 @@
+{
+  "name": "xposter",
+  "version": "1.0.0",
+  "description": "Simple X (Twitter) posting tool using Google Sheets",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["twitter", "automation"],
+  "author": "Benard Trust",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "dayjs": "^1.11.13",
+    "dotenv": "^16.5.0",
+    "googleapis": "^149.0.0",
+    "node-cron": "^4.1.0",
+    "twitter-api-v2": "^1.15.0"
+  }
+}
