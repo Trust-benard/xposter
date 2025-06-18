@@ -4,8 +4,31 @@ const { getSheetData, markAsPosted } = require('./sheet');
 const { postTweet } = require('./poster');
 require('dotenv').config();
 
+// Set up uncaught exception handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  console.error('Application will restart in 5 seconds...');
+  
+  // Log the error and restart after a short delay
+  setTimeout(() => {
+    console.log('Restarting application...');
+    process.exit(1); // Exit with error code
+  }, 5000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Application will restart in 5 seconds...');
+  
+  // Log the error and restart after a short delay
+  setTimeout(() => {
+    console.log('Restarting application...');
+    process.exit(1); // Exit with error code
+  }, 5000);
+});
+
 const app = express();
-const PORT = process.env.PORT || 3000; // Render will set PORT env variable
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
@@ -28,10 +51,14 @@ app.get('/api/status', async (req, res) => {
       totalPosts: posts.length,
       postedCount,
       pendingCount,
-      nextPostTime: getNextPostTime()
+      nextPostTime: getNextPostTime(),
+      uptime: Math.floor(process.uptime()),
+      startTime: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+      lastWatchdogReset: lastWatchdogReset.toISOString()
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Status API error:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 });
 
@@ -64,7 +91,8 @@ app.post('/api/post-now', async (req, res) => {
       res.status(500).json({ error: 'Failed to post tweet' });
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Post now API error:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 });
 
@@ -93,21 +121,50 @@ function getNextPostTime() {
   }
 }
 
-// Start the server and scheduler
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Server started at: ${new Date().toISOString()}`);
-  schedulePosts(); // Start the scheduler
-});
+// Watchdog timer to detect if the application becomes unresponsive
+let watchdogTimer;
+let lastWatchdogReset = new Date();
 
-// Log when server is ready
-server.on('listening', () => {
-  console.log(`Server is listening on port ${PORT}`);
+function resetWatchdog() {
+  if (watchdogTimer) clearTimeout(watchdogTimer);
+  lastWatchdogReset = new Date();
+  
+  // If no activity for 10 minutes, restart the application
+  watchdogTimer = setTimeout(() => {
+    console.error('Watchdog timer expired - no activity detected for 10 minutes');
+    console.error('Application will restart...');
+    process.exit(1); // Exit with error code
+  }, 10 * 60 * 1000); // 10 minutes
+}
+
+// Reset watchdog on startup
+resetWatchdog();
+
+// Reset watchdog every minute
+setInterval(() => {
+  console.log(`Health check: ${new Date().toISOString()} - Uptime: ${Math.floor(process.uptime())} seconds`);
+  resetWatchdog();
+}, 60000); // Every minute
+
+// Start the server and scheduler
+const server = app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server started at: ${new Date().toISOString()}`);
+  
+  // Start the scheduler
+  try {
+    schedulePosts();
+    console.log('Scheduler started successfully');
+  } catch (error) {
+    console.error('Failed to start scheduler:', error);
+    // Exit with error code
+    process.exit(1);
+  }
 });
 
 // Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
   server.close(() => {
     console.log('Server closed');
     process.exit(0);

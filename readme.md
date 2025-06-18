@@ -5,11 +5,11 @@ A simple Node.js application that automatically posts tweets from a Google Sheet
 ## Features
 
 - Posts 10 times per day during daytime hours (8 AM to 5 PM)
-- Automatically cycles through available tweets
+- Posts tweets in sequential order from your spreadsheet
 - Tracks posted tweets to avoid duplicates
 - Uses Google Sheets as a simple content management system
+- Auto-restarts if the application becomes unresponsive
 - Express API for monitoring and manual control
-- Easy to set up and maintain
 
 ## Setup
 
@@ -61,22 +61,20 @@ Share your Google Sheet with the email address from your service account.
 
 ## Usage
 
-### Running Locally
+### Running the Application
 
 ```
 npm start
 ```
 
-### Running as a Service
+This will start the application with auto-restart capability. If the application crashes or becomes unresponsive, it will automatically restart.
 
-For continuous operation, use PM2:
+## Self-Healing Features
 
-```
-npm install -g pm2
-pm2 start server.js
-pm2 startup
-pm2 save
-```
+The application includes two levels of self-healing:
+
+1. **Internal Watchdog Timer**: Detects if the application becomes unresponsive and triggers a restart
+2. **External Process Monitor**: The restart.js script monitors the main application and restarts it if it crashes
 
 ## API Endpoints
 
@@ -98,11 +96,15 @@ The application posts once per hour at:
 - 4:00 PM
 - 5:00 PM
 
-## Deployment Options
+## How Posts Are Selected
 
-- Local machine (requires computer to be on during posting times)
-- Cloud services like Railway.app, Render.com, or AWS EC2
-- Any Node.js hosting platform
+The application always selects the first unposted tweet in your spreadsheet. This means:
+
+1. Tweets are posted in the exact order they appear in your spreadsheet
+2. No tweets are skipped
+3. Each tweet is posted exactly once
+
+To prioritize certain tweets, simply move them to the top of your spreadsheet.
 
 ## Security Notes
 

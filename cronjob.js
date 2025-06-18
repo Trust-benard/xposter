@@ -20,8 +20,6 @@ const times = [
 async function schedulePosts() {
   console.log('Scheduling posts at the following times:');
   times.forEach(time => console.log(`- ${time} (cron format)`));
-  
-  let postIndex = 0;
 
   // Post at each scheduled time
   times.forEach(time => {
@@ -34,50 +32,37 @@ async function schedulePosts() {
           return console.log('No posts available in the spreadsheet');
         }
 
-        // Filter out posts that have already been posted
-        const availablePosts = posts.filter(post => {
+        // Find the first unposted tweet
+        const nextPostIndex = posts.findIndex(post => {
           const [, posted] = post;
           return !posted || posted.toLowerCase() !== 'yes';
         });
 
-        if (availablePosts.length === 0) {
+        if (nextPostIndex === -1) {
           return console.log('All posts have been published');
         }
 
-        // Use modulo to cycle through available posts
-        const index = postIndex % availablePosts.length;
-        const selectedPost = availablePosts[index];
+        const [content] = posts[nextPostIndex];
         
-        // Find the original index in the full posts array
-        const originalIndex = posts.findIndex(post => post === selectedPost);
+        // Skip if content is empty
+        if (!content || content.trim() === '') {
+          console.log('Skipping empty post');
+          return;
+        }
         
-        if (originalIndex !== -1) {
-          const [content] = selectedPost;
+        console.log(`Posting content: "${content.substring(0, 30)}..."`);
+        
+        // Post the tweet
+        const result = await postTweet(content);
+        
+        if (result) {
+          console.log(`Successfully posted tweet at ${dayjs().format('YYYY-MM-DD HH:mm:ss')}`);
+          console.log(`Tweet ID: ${result.data.id}`);
           
-          // Skip if content is empty
-          if (!content || content.trim() === '') {
-            console.log('Skipping empty post');
-            postIndex++;
-            return;
-          }
-          
-          console.log(`Posting content: "${content.substring(0, 30)}..."`);
-          
-          // Post the tweet
-          const result = await postTweet(content);
-          
-          if (result) {
-            console.log(`Successfully posted tweet at ${dayjs().format('YYYY-MM-DD HH:mm:ss')}`);
-            console.log(`Tweet ID: ${result.data.id}`);
-            
-            // Mark as posted in the spreadsheet
-            await markAsPosted(originalIndex);
-            postIndex++;
-          } else {
-            console.log(`Failed to post tweet, will retry next time`);
-          }
+          // Mark as posted in the spreadsheet
+          await markAsPosted(nextPostIndex);
         } else {
-          console.log('Error finding post index');
+          console.log(`Failed to post tweet, will retry next time`);
         }
       } catch (error) {
         console.error('Error in scheduled post:', error);
